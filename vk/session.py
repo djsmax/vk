@@ -4,6 +4,13 @@ import logging
 
 import requests
 
+try:
+    from urllib import urlencode
+except ImportError:
+    from urllib.parse import urlencode
+
+import hashlib
+
 from .exceptions import VkAuthError, VkAPIError
 from .utils import raw_input, get_url_query, get_form_action, stringify_values, json_iter_parse
 
@@ -18,7 +25,7 @@ class Session(object):
 
     CAPTCHA_URI = 'https://m.vk.com/captcha.php'
 
-    def __init__(self, user_login='', user_password='', app_id='', scope='offline', access_token='', timeout=10,
+    def __init__(self, user_login='', user_password='', app_id='', scope='offline', access_token='', nohttps_secret = '', timeout=10,
                  **method_default_args):
 
         self.user_login = user_login
@@ -27,6 +34,7 @@ class Session(object):
         self.scope = scope
 
         self.access_token = access_token
+        self.nohttps_secret = nohttps_secret
         self.timeout = timeout
         self.method_default_args = method_default_args
 
@@ -38,6 +46,9 @@ class Session(object):
 
     def get_access_token(self):
         self.login()
+
+    def get_app_secret(self):
+        return self.nohttps_secret
 
     def get_user_login(self):
         return self.user_login
@@ -175,6 +186,11 @@ class Session(object):
         if captcha_response:
             method_args['captcha_sid'] = captcha_response['sid']
             method_args['captcha_key'] = captcha_response['key']
+        if self.nohttps_secret:
+            us = '/method/%s?%s%s' % (request._method_name,urlencode(sorted(method_args.items())),self.nohttps_secret)
+            sig = hashlib.md5(bytes(us,'utf-8')).hexdigest()
+            method_args['sig'] = sig
+            method_args = urlencode(sorted(method_args.items()))
         response = self.requests_session.post(url, method_args, timeout=self.timeout)
         return response
 
